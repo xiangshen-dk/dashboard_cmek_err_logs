@@ -113,15 +113,15 @@ Removes all resources created by the setup script.
     --force
 ```
 
-### 5. `teardown_cmek_log_bucket_simple.sh`
-Wrapper script for teardown with predefined values.
+### 5. `teardown_cmek_log_bucket_sample.sh`
+Sample teardown script with predefined values.
 
 ```bash
 # Simple teardown
-./teardown_cmek_log_bucket_simple.sh
+./teardown_cmek_log_bucket_sample.sh
 
 # With KMS deletion
-./teardown_cmek_log_bucket_simple.sh --delete-kms
+./teardown_cmek_log_bucket_sample.sh --delete-kms
 ```
 
 ## Log Analytics and Routing

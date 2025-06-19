@@ -5,7 +5,7 @@
 set -e # Exit immediately if a command exits with a non-zero status.
 
 # Configuration
-PROJECT_ID="shenxiang-gcp-solution"
+#PROJECT_ID="shenxiang-gcp-solution"
 LOCATION="us"
 KEY_RING_NAME="logging-cmek-keyring"
 KEY_NAME="logging-cmek-key"
