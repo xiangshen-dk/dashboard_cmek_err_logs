@@ -5,6 +5,8 @@ This repository contains scripts for setting up Cloud Logging buckets with Custo
 ## Table of Contents
 - [Overview](#overview)
 - [CMEK Log Bucket Scripts](#cmek-log-bucket-scripts)
+- [Log Analytics and Routing](#log-analytics-and-routing)
+- [Monitoring Dashboard](#monitoring-dashboard)
 - [Error Log Generator](#error-log-generator)
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
@@ -59,15 +61,15 @@ Main script for creating a Cloud Logging bucket with CMEK encryption and log ana
     --log-filter 'severity="ERROR" AND resource.type="gce_instance"'
 ```
 
-### 2. `setup_cmek_log_bucket_simple.sh`
-Wrapper script with hardcoded values for quick setup.
+### 2. `setup_cmek_log_bucket_sample.sh`
+Sample script with predefined values for quick setup and testing.
 
 ```bash
-# Uses predefined values for shenxiang-gcp-solution project
-./setup_cmek_log_bucket_simple.sh
+# Uses predefined values for the sample project
+./setup_cmek_log_bucket_sample.sh
 
 # Pass additional flags
-./setup_cmek_log_bucket_simple.sh --auto-create-kms
+./setup_cmek_log_bucket_sample.sh --auto-create-kms
 ```
 
 ### 3. `create_kms_resources.sh`
@@ -112,7 +114,7 @@ Removes all resources created by the setup script.
 ```
 
 ### 5. `teardown_cmek_log_bucket_simple.sh`
-Wrapper script for teardown with hardcoded values.
+Wrapper script for teardown with predefined values.
 
 ```bash
 # Simple teardown
@@ -172,12 +174,18 @@ Generates ReportedErrorEvent format logs with:
 
 ### Installation
 
-1. Install dependencies:
+1. Start a new virtual environment
+   ```bash
+   python3 -mvenv venv
+   . venv/bin/activate
+   ```
+
+2. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-2. Set up authentication:
+3. Set up authentication:
    ```bash
    gcloud auth application-default login
    ```
@@ -186,13 +194,13 @@ Generates ReportedErrorEvent format logs with:
 
 ```bash
 # Generate 10 error logs (default)
-python generate_error_logs.py
+python generate_error_logs.py --prefix "test"
 
 # Generate 20 error logs with a prefix
-python generate_error_logs.py --count 20 --prefix "test"
+python generate_error_logs.py --count 20 --prefix "test1"
 
 # Specify project ID explicitly
-python generate_error_logs.py --project-id my-project
+python generate_error_logs.py --project-id my-project --prefix "test 123"
 ```
 
 ### Command Line Options
@@ -252,13 +260,32 @@ After running the script, view errors in:
 
 2. **Generate test error logs:**
    ```bash
-   python generate_error_logs.py --prefix "test"
+   python generate_error_logs.py --prefix "test123"
    ```
 
 3. **Verify logs are routed correctly:**
    - Check your CMEK bucket for the test logs
    - Verify they don't appear in the _Default bucket
 
+4. **Create the Monitoring Dashboard:**
+
+    After setting up your CMEK log bucket, you can create a monitoring dashboard to visualize error reports:
+
+    ```bash
+    # Set environment variables
+    export PROJECT_ID="your-gcp-project-id"
+    export LOG_BUCKET_ID="your-new-bucket-id"
+
+    # Generate the dashboard JSON with your values
+    envsubst < error_report_with_cmek.json > err_rpt.json
+
+    # Import the dashboard to Cloud Monitoring
+    gcloud monitoring dashboards create --config-from-file=err_rpt.json
+    ```
+
+    This will create a dashboard that displays error reports from your CMEK-encrypted log bucket.
+
+    ![Error Reporting Dashboard Sample](err_rpt_sample.png)
 4. **Clean up when done:**
    ```bash
    ./teardown_cmek_log_bucket.sh \
