@@ -45,6 +45,9 @@ KMS_KEY="$DEFAULT_KEY"
 RETENTION_DAYS="$DEFAULT_RETENTION_DAYS"
 AUTO_CREATE_KMS=false
 ENABLE_ANALYTICS=true
+CREATE_LOG_SINK=true
+LOG_FILTER='severity="ERROR" AND jsonPayload.message=~"^test.*"'
+SINK_NAME=""
 
 # Function to show usage
 show_usage() {
@@ -62,6 +65,9 @@ show_usage() {
     echo "  --retention-days      Log retention in days (default: $DEFAULT_RETENTION_DAYS)"
     echo "  --auto-create-kms     Automatically create KMS resources if they don't exist"
     echo "  --no-analytics        Disable log analytics (enabled by default)"
+    echo "  --create-sink         Create a log sink to route logs to this bucket (default: true)"
+    echo "  --sink-name           Name for the log sink (default: BUCKET_ID-sink)"
+    echo "  --log-filter          Log filter for the sink (default: 'severity=\"ERROR\" AND jsonPayload.message=~\"^test.*\"')"
     echo "  --help, -h            Show this help message"
     echo ""
     echo "Example:"
@@ -109,6 +115,18 @@ while [[ $# -gt 0 ]]; do
             ENABLE_ANALYTICS=false
             shift
             ;;
+        --create-sink)
+            CREATE_LOG_SINK=true
+            shift
+            ;;
+        --sink-name)
+            SINK_NAME="$2"
+            shift 2
+            ;;
+        --log-filter)
+            LOG_FILTER="$2"
+            shift 2
+            ;;
         --help|-h)
             show_usage
             ;;
@@ -140,6 +158,11 @@ if [[ -z "$BUCKET_ID" ]]; then
     print_message "$YELLOW" "Using default bucket ID: $BUCKET_ID"
 fi
 
+if [[ -z "$SINK_NAME" && "$CREATE_LOG_SINK" == "true" ]]; then
+    # Generate a default sink name
+    SINK_NAME="${BUCKET_ID}-sink"
+fi
+
 # --- SCRIPT EXECUTION ---
 
 print_message "$BLUE" "=== Cloud Logging CMEK Bucket Setup ==="
@@ -151,6 +174,10 @@ print_message "$GREEN" "Key Ring: $KMS_KEY_RING"
 print_message "$GREEN" "Key Name: $KMS_KEY"
 print_message "$GREEN" "Retention: $RETENTION_DAYS days"
 print_message "$GREEN" "Log Analytics: $(if [[ "$ENABLE_ANALYTICS" == "true" ]]; then echo "Enabled"; else echo "Disabled"; fi)"
+if [[ "$CREATE_LOG_SINK" == "true" ]]; then
+    print_message "$GREEN" "Log Sink: $SINK_NAME"
+    print_message "$GREEN" "Log Filter: $LOG_FILTER"
+fi
 echo ""
 
 # Step 0: Check if log bucket already exists
@@ -384,6 +411,80 @@ else
     error_exit "CMEK configuration verification failed"
 fi
 
+# Step 7: Create log sink if requested
+if [[ "$CREATE_LOG_SINK" == "true" ]]; then
+    print_message "$YELLOW" "[Step 7/7] Creating log sink to route logs to the CMEK bucket..."
+    
+    SINK_DESTINATION="logging.googleapis.com/projects/$BUCKET_PROJECT_ID/locations/$LOCATION/buckets/$BUCKET_ID"
+    
+    # Check if sink already exists
+    if gcloud logging sinks describe "$SINK_NAME" --project="$BUCKET_PROJECT_ID" &>/dev/null; then
+        print_message "$YELLOW" "Log sink '$SINK_NAME' already exists. Updating..."
+        if gcloud logging sinks update "$SINK_NAME" \
+            --log-filter="$LOG_FILTER" \
+            --destination="$SINK_DESTINATION" \
+            --project="$BUCKET_PROJECT_ID" 2>&1 | tee /tmp/sink_update_output.txt; then
+            print_message "$GREEN" "✓ Log sink updated successfully"
+        else
+            print_message "$RED" "Failed to update log sink"
+            cat /tmp/sink_update_output.txt
+        fi
+    else
+        print_message "$YELLOW" "Creating new log sink '$SINK_NAME'..."
+        if gcloud logging sinks create "$SINK_NAME" \
+            "$SINK_DESTINATION" \
+            --log-filter="$LOG_FILTER" \
+            --project="$BUCKET_PROJECT_ID" 2>&1 | tee /tmp/sink_create_output.txt; then
+            print_message "$GREEN" "✓ Log sink created successfully"
+        else
+            print_message "$RED" "Failed to create log sink"
+            cat /tmp/sink_create_output.txt
+        fi
+    fi
+    
+    # Step 8: Add exclusion to _Default sink
+    print_message "$YELLOW" "[Step 8/8] Adding exclusion to _Default sink to prevent duplicate logs..."
+    
+    EXCLUSION_NAME="${SINK_NAME}-exclusion"
+    EXCLUSION_DESC="Exclude logs routed to $BUCKET_ID via $SINK_NAME"
+    
+    print_message "$YELLOW" "Adding exclusion with filter: $LOG_FILTER"
+    
+    # Escape the filter for shell command
+    ESCAPED_FILTER=$(printf '%q' "$LOG_FILTER")
+    
+    # Add or update the exclusion on the _Default sink
+    if gcloud logging sinks update _Default \
+        --add-exclusion=name="${EXCLUSION_NAME}",filter="${LOG_FILTER}",description="${EXCLUSION_DESC}" \
+        --project="$BUCKET_PROJECT_ID" 2>&1 | tee /tmp/default_sink_update.txt; then
+        print_message "$GREEN" "✓ Exclusion added to _Default sink successfully"
+        print_message "$GREEN" "  Logs matching the filter will NOT appear in the _Default bucket"
+    else
+        # Check if it's because the exclusion already exists
+        if grep -q "already exists" /tmp/default_sink_update.txt; then
+            print_message "$YELLOW" "Exclusion already exists. Updating it..."
+            # Try to update by removing and re-adding
+            gcloud logging sinks update _Default \
+                --remove-exclusion="${EXCLUSION_NAME}" \
+                --project="$BUCKET_PROJECT_ID" 2>/dev/null || true
+            
+            if gcloud logging sinks update _Default \
+                --add-exclusion=name="${EXCLUSION_NAME}",filter="${LOG_FILTER}",description="${EXCLUSION_DESC}" \
+                --project="$BUCKET_PROJECT_ID" 2>&1 | tee /tmp/default_sink_update2.txt; then
+                print_message "$GREEN" "✓ Exclusion updated successfully"
+            else
+                print_message "$RED" "Failed to update exclusion on _Default sink"
+                cat /tmp/default_sink_update2.txt
+                print_message "$YELLOW" "You may need to manually add the exclusion to the _Default sink"
+            fi
+        else
+            print_message "$RED" "Failed to add exclusion to _Default sink"
+            cat /tmp/default_sink_update.txt
+            print_message "$YELLOW" "You may need to manually add the exclusion to the _Default sink"
+        fi
+    fi
+fi
+
 # Display summary
 echo ""
 print_message "$BLUE" "=== Setup Complete ==="
@@ -393,9 +494,23 @@ print_message "$GREEN" "✓ Project: $BUCKET_PROJECT_ID"
 print_message "$GREEN" "✓ CMEK Key: $CMEK_KEY"
 print_message "$GREEN" "✓ Retention: $RETENTION days"
 print_message "$GREEN" "✓ Log Analytics: $(if [[ "$ANALYTICS_ENABLED" == "true" ]]; then echo "Enabled"; else echo "Disabled"; fi)"
+if [[ "$CREATE_LOG_SINK" == "true" ]]; then
+    print_message "$GREEN" "✓ Log Sink: $SINK_NAME"
+    print_message "$GREEN" "✓ Log Filter: $LOG_FILTER"
+    print_message "$GREEN" "✓ Exclusion: Added to _Default sink"
+fi
 echo ""
-print_message "$YELLOW" "To route logs to this bucket, create a log sink:"
-echo "  gcloud logging sinks create SINK_NAME \\"
-echo "    logging.googleapis.com/projects/$BUCKET_PROJECT_ID/locations/$LOCATION/buckets/$BUCKET_ID \\"
-echo "    --log-filter='YOUR_FILTER' \\"
-echo "    --project=YOUR_PROJECT"
+if [[ "$CREATE_LOG_SINK" == "true" ]]; then
+    print_message "$YELLOW" "Logs matching the filter will be:"
+    print_message "$YELLOW" "  • Routed to: $BUCKET_ID"
+    print_message "$YELLOW" "  • Excluded from: _Default bucket"
+    echo ""
+    print_message "$YELLOW" "To test the configuration, generate matching logs:"
+    echo "  gcloud logging write test-log '{\"message\": \"test error message\"}' --payload-type=json --severity=ERROR --project=$BUCKET_PROJECT_ID"
+else
+    print_message "$YELLOW" "To route logs to this bucket, create a log sink:"
+    echo "  gcloud logging sinks create SINK_NAME \\"
+    echo "    logging.googleapis.com/projects/$BUCKET_PROJECT_ID/locations/$LOCATION/buckets/$BUCKET_ID \\"
+    echo "    --log-filter='YOUR_FILTER' \\"
+    echo "    --project=YOUR_PROJECT"
+fi

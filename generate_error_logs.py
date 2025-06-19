@@ -85,96 +85,6 @@ class ErrorGenerator:
             stack_trace = traceback.format_exc()
             return str(e), stack_trace
             
-    def log_stack_trace_as_text_payload(self):
-        """Log an error with stack trace using textPayload."""
-        error_msg, stack_trace = self.generate_python_exception()
-        
-        # Prepend prefix to stack trace if provided
-        if self.prefix:
-            stack_trace = f"{self.prefix}\n{stack_trace}"
-        
-        # Log with textPayload (multi-line string with stack trace)
-        self.logger.log_text(
-            stack_trace,
-            severity='ERROR'
-        )
-        print(f"Logged error with textPayload: {error_msg}")
-        
-    def log_stack_trace_as_json_payload(self):
-        """Log an error with stack trace using jsonPayload."""
-        error_msg, stack_trace = self.generate_python_exception()
-        
-        # Prepend prefix to message and stack trace if provided
-        message = f'Error occurred: {error_msg}'
-        if self.prefix:
-            message = f'{self.prefix} {message}'
-            stack_trace = f"{self.prefix}\n{stack_trace}"
-        
-        # Log with jsonPayload containing stack_trace field
-        json_payload = {
-            'message': message,
-            'stack_trace': stack_trace,
-            'serviceContext': {
-                'service': 'error-reporting-demo',
-                'version': '1.0.0'
-            },
-            'context': {
-                'user': f'user_{random.randint(1000, 9999)}',
-                'reportLocation': {
-                    'filePath': 'generate_error_logs.py',
-                    'lineNumber': random.randint(30, 50),
-                    'functionName': 'generate_python_exception'
-                }
-            }
-        }
-        
-        self.logger.log_struct(
-            json_payload,
-            severity='ERROR'
-        )
-        print(f"Logged error with jsonPayload (stack_trace field): {error_msg}")
-        
-    def log_text_message_error(self):
-        """Log a text message error without stack trace."""
-        error_messages = [
-            "Database connection timeout after 30 seconds",
-            "Failed to authenticate user: Invalid credentials",
-            "Payment processing failed: Card declined",
-            "API rate limit exceeded for endpoint /api/v1/users",
-            "File upload failed: Maximum file size exceeded",
-            "Cache miss for key: user_session_12345"
-        ]
-        
-        error_msg = random.choice(error_messages)
-        
-        # Prepend prefix if provided
-        if self.prefix:
-            error_msg = f'{self.prefix} {error_msg}'
-        
-        # For text messages without stack trace, we need to use the special @type
-        json_payload = {
-            '@type': 'type.googleapis.com/google.devtools.clouderrorreporting.v1beta1.ReportedErrorEvent',
-            'message': error_msg,
-            'serviceContext': {
-                'service': 'error-reporting-demo',
-                'version': '1.0.0'
-            },
-            'context': {
-                'httpRequest': {
-                    'method': random.choice(['GET', 'POST', 'PUT', 'DELETE']),
-                    'url': f'https://example.com/api/v1/{random.choice(["users", "orders", "products"])}',
-                    'responseStatusCode': random.choice([400, 401, 403, 404, 500, 502, 503])
-                },
-                'user': f'user_{random.randint(1000, 9999)}'
-            }
-        }
-        
-        self.logger.log_struct(
-            json_payload,
-            severity='ERROR'
-        )
-        print(f"Logged text message error: {error_msg}")
-        
     def log_reported_error_event_format(self):
         """Log an error using the ReportedErrorEvent format."""
         # Simulate different types of application errors
@@ -244,66 +154,14 @@ class ErrorGenerator:
         )
         print(f"Logged ReportedErrorEvent format error for {scenario['service']}")
         
-    def log_custom_json_with_embedded_stack_trace(self):
-        """Log an error with stack trace embedded in a custom JSON field."""
-        error_msg, stack_trace = self.generate_python_exception()
-        
-        # Prepend prefix if provided
-        if self.prefix:
-            error_msg = f'{self.prefix} {error_msg}'
-            stack_trace = f"{self.prefix}\n{stack_trace}"
-        
-        # Create a complex JSON structure with stack trace in a nested field
-        json_payload = {
-            'timestamp': datetime.utcnow().isoformat(),
-            'application': {
-                'name': 'error-reporting-demo',
-                'environment': random.choice(['production', 'staging', 'development']),
-                'version': '2.1.0'
-            },
-            'error_details': {
-                'error_type': type(Exception).__name__,
-                'error_message': error_msg,
-                'full_stack_trace': stack_trace,  # Error Reporting will find this
-                'additional_context': {
-                    'request_id': f'req_{random.randint(100000, 999999)}',
-                    'session_id': f'sess_{random.randint(100000, 999999)}',
-                    'feature_flags': {
-                        'new_ui': random.choice([True, False]),
-                        'beta_features': random.choice([True, False])
-                    }
-                }
-            },
-            'metrics': {
-                'response_time_ms': random.randint(100, 5000),
-                'memory_usage_mb': random.randint(50, 500)
-            }
-        }
-        
-        self.logger.log_struct(
-            json_payload,
-            severity='ERROR'
-        )
-        print(f"Logged custom JSON with embedded stack trace: {error_msg}")
-        
     def generate_batch_errors(self, count=10):
         """Generate a batch of different error types."""
         print(f"\nGenerating {count} error log entries...")
         print("=" * 50)
         
-        error_methods = [
-            self.log_stack_trace_as_text_payload,
-            self.log_stack_trace_as_json_payload,
-            self.log_text_message_error,
-            self.log_reported_error_event_format,
-            self.log_custom_json_with_embedded_stack_trace
-        ]
-        
         for i in range(count):
-            # Randomly select an error generation method
-            error_method = random.choice(error_methods)
             try:
-                error_method()
+                self.log_reported_error_event_format()
                 print(f"  [{i+1}/{count}] ✓ Error logged successfully")
             except Exception as e:
                 print(f"  [{i+1}/{count}] ✗ Failed to log error: {e}")
@@ -334,12 +192,6 @@ def main():
         help='Number of error log entries to generate (default: 10)'
     )
     parser.add_argument(
-        '--type',
-        choices=['text', 'json', 'message', 'reported', 'custom', 'all'],
-        default='all',
-        help='Type of error to generate (default: all)'
-    )
-    parser.add_argument(
         '--prefix',
         help='String to prepend to all error messages'
     )
@@ -350,26 +202,8 @@ def main():
         # Create error generator
         generator = ErrorGenerator(project_id=args.project_id, prefix=args.prefix)
         
-        if args.type == 'all':
-            # Generate a batch of mixed error types
-            generator.generate_batch_errors(args.count)
-        else:
-            # Generate specific error type
-            type_map = {
-                'text': generator.log_stack_trace_as_text_payload,
-                'json': generator.log_stack_trace_as_json_payload,
-                'message': generator.log_text_message_error,
-                'reported': generator.log_reported_error_event_format,
-                'custom': generator.log_custom_json_with_embedded_stack_trace
-            }
-            
-            print(f"\nGenerating {args.count} '{args.type}' error log entries...")
-            for i in range(args.count):
-                try:
-                    type_map[args.type]()
-                    print(f"  [{i+1}/{args.count}] ✓ Error logged successfully")
-                except Exception as e:
-                    print(f"  [{i+1}/{args.count}] ✗ Failed to log error: {e}")
+        # Generate a batch of error logs
+        generator.generate_batch_errors(args.count)
                     
     except ValueError as e:
         print(f"\nError: {e}")

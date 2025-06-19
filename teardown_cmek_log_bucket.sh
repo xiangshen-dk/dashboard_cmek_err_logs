@@ -46,6 +46,7 @@ KMS_KEY_RING="$DEFAULT_KEY_RING"
 KMS_KEY="$DEFAULT_KEY"
 DELETE_KMS_RESOURCES=false
 FORCE=false
+SINK_NAME=""
 
 # Function to show usage
 show_usage() {
@@ -60,6 +61,7 @@ show_usage() {
     echo "  --location            Location of resources (default: $DEFAULT_LOCATION)"
     echo "  --key-ring            KMS key ring name (default: $DEFAULT_KEY_RING)"
     echo "  --key-name            KMS key name (default: $DEFAULT_KEY)"
+    echo "  --sink-name           Name of the log sink to delete (default: BUCKET_ID-sink)"
     echo "  --delete-kms          Also delete the KMS key and keyring (requires confirmation)"
     echo "  --force               Skip confirmation prompts (use with caution!)"
     echo "  --help, -h            Show this help message"
@@ -96,6 +98,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --key-name)
             KMS_KEY="$2"
+            shift 2
+            ;;
+        --sink-name)
+            SINK_NAME="$2"
             shift 2
             ;;
         --delete-kms)
@@ -137,11 +143,17 @@ if [[ -z "$BUCKET_ID" ]]; then
     print_message "$YELLOW" "Using default bucket ID: $BUCKET_ID"
 fi
 
+if [[ -z "$SINK_NAME" ]]; then
+    # Generate the default sink name
+    SINK_NAME="${BUCKET_ID}-sink"
+fi
+
 # --- SCRIPT EXECUTION ---
 
 print_message "$BLUE" "=== Cloud Logging CMEK Bucket Teardown ==="
 print_message "$YELLOW" "This script will delete the following resources:"
 print_message "$RED" "  • Log bucket: $BUCKET_ID (in project $BUCKET_PROJECT_ID)"
+print_message "$RED" "  • Log sink: $SINK_NAME (if exists)"
 print_message "$RED" "  • IAM bindings on KMS key: $KMS_KEY"
 if [[ "$DELETE_KMS_RESOURCES" == "true" ]]; then
     print_message "$RED" "  • KMS key: $KMS_KEY (in keyring $KMS_KEY_RING)"
@@ -159,8 +171,40 @@ if [[ "$FORCE" != "true" ]]; then
     fi
 fi
 
-# Step 1: Check if log bucket exists and get its configuration
-print_message "$YELLOW" "[Step 1/4] Checking log bucket configuration..."
+# Step 1: Delete log sink if it exists
+print_message "$YELLOW" "[Step 1/6] Checking and deleting log sink..."
+if gcloud logging sinks describe "$SINK_NAME" --project="$BUCKET_PROJECT_ID" &>/dev/null; then
+    print_message "$YELLOW" "Deleting log sink '$SINK_NAME'..."
+    if gcloud logging sinks delete "$SINK_NAME" --project="$BUCKET_PROJECT_ID" 2>&1 | tee /tmp/sink_delete_output.txt; then
+        print_message "$GREEN" "✓ Log sink deleted successfully"
+    else
+        print_message "$RED" "Failed to delete log sink"
+        cat /tmp/sink_delete_output.txt
+    fi
+else
+    print_message "$YELLOW" "Log sink '$SINK_NAME' not found or already deleted"
+fi
+
+# Step 2: Remove exclusion from _Default sink
+print_message "$YELLOW" "[Step 2/6] Removing exclusion from _Default sink..."
+EXCLUSION_NAME="${SINK_NAME}-exclusion"
+
+# Remove the exclusion from _Default sink
+if gcloud logging sinks update _Default \
+    --remove-exclusion="${EXCLUSION_NAME}" \
+    --project="$BUCKET_PROJECT_ID" 2>&1 | tee /tmp/default_sink_update.txt; then
+    print_message "$GREEN" "✓ Exclusion removed from _Default sink successfully"
+else
+    if grep -q "does not exist" /tmp/default_sink_update.txt || grep -q "not found" /tmp/default_sink_update.txt; then
+        print_message "$YELLOW" "Exclusion '$EXCLUSION_NAME' not found in _Default sink (may have been already removed)"
+    else
+        print_message "$RED" "Failed to remove exclusion from _Default sink"
+        cat /tmp/default_sink_update.txt
+    fi
+fi
+
+# Step 3: Check if log bucket exists and get its configuration
+print_message "$YELLOW" "[Step 3/6] Checking log bucket configuration..."
 if ! gcloud logging buckets describe "$BUCKET_ID" \
     --location="$LOCATION" \
     --project="$BUCKET_PROJECT_ID" &>/dev/null; then
@@ -180,8 +224,8 @@ else
     fi
 fi
 
-# Step 2: Delete the log bucket
-print_message "$YELLOW" "[Step 2/4] Deleting log bucket..."
+# Step 4: Delete the log bucket
+print_message "$YELLOW" "[Step 4/6] Deleting log bucket..."
 if gcloud logging buckets describe "$BUCKET_ID" \
     --location="$LOCATION" \
     --project="$BUCKET_PROJECT_ID" &>/dev/null; then
@@ -199,8 +243,8 @@ else
     print_message "$YELLOW" "Log bucket already deleted or doesn't exist"
 fi
 
-# Step 3: Remove IAM binding from KMS key
-print_message "$YELLOW" "[Step 3/4] Removing IAM bindings from KMS key..."
+# Step 5: Remove IAM binding from KMS key
+print_message "$YELLOW" "[Step 5/6] Removing IAM bindings from KMS key..."
 
 # Get the Logging service account
 PROJECT_NUMBER=$(gcloud projects describe "$BUCKET_PROJECT_ID" --format="value(projectNumber)" 2>/dev/null || true)
@@ -245,9 +289,9 @@ else
     print_message "$YELLOW" "Could not determine project number, skipping IAM cleanup"
 fi
 
-# Step 4: Optionally delete KMS resources
+# Step 6: Optionally delete KMS resources
 if [[ "$DELETE_KMS_RESOURCES" == "true" ]]; then
-    print_message "$YELLOW" "[Step 4/4] Deleting KMS resources..."
+    print_message "$YELLOW" "[Step 6/6] Deleting KMS resources..."
     
     # Check if KMS key exists
     if gcloud kms keys describe "$KMS_KEY" \
@@ -298,13 +342,15 @@ if [[ "$DELETE_KMS_RESOURCES" == "true" ]]; then
     # Note: KMS keyrings cannot be deleted, only keys within them
     print_message "$YELLOW" "Note: KMS keyrings cannot be deleted. The keyring '$KMS_KEY_RING' will remain but will be empty."
 else
-    print_message "$YELLOW" "[Step 4/4] Skipping KMS resource deletion (use --delete-kms to delete them)"
+    print_message "$YELLOW" "[Step 6/6] Skipping KMS resource deletion (use --delete-kms to delete them)"
 fi
 
 # Display summary
 echo ""
 print_message "$BLUE" "=== Teardown Complete ==="
 print_message "$GREEN" "The following actions were performed:"
+print_message "$GREEN" "✓ Log sink '$SINK_NAME' deleted (or was already deleted)"
+print_message "$GREEN" "✓ Exclusion removed from _Default sink (if existed)"
 print_message "$GREEN" "✓ Log bucket '$BUCKET_ID' deleted (or was already deleted)"
 print_message "$GREEN" "✓ IAM bindings removed from KMS key"
 if [[ "$DELETE_KMS_RESOURCES" == "true" ]]; then
