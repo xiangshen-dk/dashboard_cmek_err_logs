@@ -1,0 +1,270 @@
+{
+  "displayName": "CMEK Error Reporting by OA Demo",
+  "dashboardFilters": [
+    {
+      "filterType": "VALUE_ONLY",
+      "labelKey": "",
+      "templateVariable": "error_group_id",
+      "timeSeriesQuery": {
+        "opsAnalyticsQuery": {
+          "queryExecutionRules": {
+            "useReservedSlots": false
+          },
+          "queryHandle": "",
+          "savedQueryId": "",
+          "sql": "SELECT\n  eg.id AS error_group_id\nFROM\n  `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`, UNNEST(error_groups) eg\nWHERE array_LENGTH(error_groups) >= 1"
+        },
+        "outputFullDuration": false,
+        "unitOverride": ""
+      },
+      "valueType": "STRING_ARRAY"
+    }
+  ],
+  "labels": {},
+  "mosaicLayout": {
+    "columns": 48,
+    "tiles": [
+      {
+        "height": 15,
+        "width": 10,
+        "widget": {
+          "title": "Error Occurrences",
+          "id": "",
+          "pieChart": {
+            "chartType": "DONUT",
+            "dataSets": [
+              {
+                "breakdowns": [],
+                "dimensions": [
+                  {
+                    "column": "id",
+                    "columnType": "STRING",
+                    "maxBinCount": 5,
+                    "sortColumn": "id",
+                    "sortOrder": "SORT_ORDER_ASCENDING"
+                  }
+                ],
+                "measures": [
+                  {
+                    "aggregationFunction": {
+                      "parameters": [],
+                      "type": "count"
+                    },
+                    "column": ""
+                  }
+                ],
+                "sliceNameTemplate": "",
+                "timeSeriesQuery": {
+                  "opsAnalyticsQuery": {
+                    "queryExecutionRules": {
+                      "useReservedSlots": false
+                    },
+                    "queryHandle": "",
+                    "savedQueryId": "",
+                    "sql": "SELECT\n  TIMESTAMP_TRUNC(timestamp, HOUR) AS hour, eg.id AS id\nFROM\n  `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`, UNNEST(error_groups) eg\nWHERE\n  IF(\n    ARRAY_LENGTH(@error_group_id) = 0,\n    TRUE,\n    IF(ARRAY_LENGTH(CAST(@error_group_id as ARRAY<STRING>)) IS NULL, TRUE, id IN UNNEST(@error_group_id))\n  )"
+                  },
+                  "outputFullDuration": false,
+                  "unitOverride": ""
+                }
+              }
+            ],
+            "showLabels": false,
+            "showTotal": false,
+            "sliceAggregatedThreshold": 0
+          }
+        }
+      },
+      {
+        "xPos": 10,
+        "height": 8,
+        "width": 8,
+        "widget": {
+          "title": "Error Occurrences",
+          "id": "",
+          "scorecard": {
+            "breakdowns": [],
+            "dimensions": [
+              {
+                "column": "hour",
+                "columnType": "TIMESTAMP",
+                "maxBinCount": 0,
+                "sortColumn": "hour",
+                "sortOrder": "SORT_ORDER_ASCENDING",
+                "timeBinSize": "0s"
+              }
+            ],
+            "measures": [
+              {
+                "aggregationFunction": {
+                  "parameters": [],
+                  "type": "count"
+                },
+                "column": ""
+              }
+            ],
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "opsAnalyticsQuery": {
+                "queryExecutionRules": {
+                  "useReservedSlots": false
+                },
+                "queryHandle": "",
+                "savedQueryId": "",
+                "sql": "SELECT\n  TIMESTAMP_TRUNC(timestamp, HOUR) AS hour, eg.id AS id\nFROM\n  `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`, UNNEST(error_groups) eg\nWHERE\n  IF(\n    ARRAY_LENGTH(@error_group_id) = 0,\n    TRUE,\n    IF(ARRAY_LENGTH(CAST(@error_group_id as ARRAY<STRING>)) IS NULL, TRUE, id IN UNNEST(@error_group_id))\n  )"
+              },
+              "outputFullDuration": false,
+              "unitOverride": ""
+            }
+          }
+        }
+      },
+      {
+        "xPos": 18,
+        "height": 16,
+        "width": 29,
+        "widget": {
+          "title": "Error Timeline",
+          "id": "",
+          "xyChart": {
+            "chartOptions": {
+              "displayHorizontal": false,
+              "mode": "COLOR",
+              "showLegend": false
+            },
+            "dataSets": [
+              {
+                "breakdowns": [
+                  {
+                    "aggregationFunction": {
+                      "parameters": [],
+                      "type": "count"
+                    },
+                    "column": "id",
+                    "limit": 20,
+                    "sortOrder": "SORT_ORDER_DESCENDING"
+                  }
+                ],
+                "dimensions": [
+                  {
+                    "column": "minute",
+                    "columnType": "TIMESTAMP",
+                    "maxBinCount": 0,
+                    "sortColumn": "minute",
+                    "sortOrder": "SORT_ORDER_ASCENDING",
+                    "timeBinSize": "0s"
+                  }
+                ],
+                "legendTemplate": "",
+                "measures": [
+                  {
+                    "aggregationFunction": {
+                      "parameters": [],
+                      "type": "count"
+                    },
+                    "column": ""
+                  }
+                ],
+                "plotType": "STACKED_BAR",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "opsAnalyticsQuery": {
+                    "queryExecutionRules": {
+                      "useReservedSlots": false
+                    },
+                    "queryHandle": "",
+                    "savedQueryId": "",
+                    "sql": "SELECT\n  TIMESTAMP_TRUNC(timestamp, minute) AS minute, eg.id AS id\nFROM\n  `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`, UNNEST(error_groups) eg\nWHERE\n  IF(\n    ARRAY_LENGTH(@error_group_id) = 0,\n    TRUE,\n    IF(ARRAY_LENGTH(CAST(@error_group_id as ARRAY<STRING>)) IS NULL, TRUE, id IN UNNEST(@error_group_id))\n  )"
+                  },
+                  "outputFullDuration": false,
+                  "unitOverride": ""
+                }
+              }
+            ],
+            "thresholds": [],
+            "yAxis": {
+              "label": "",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "yPos": 8,
+        "xPos": 10,
+        "height": 8,
+        "width": 8,
+        "widget": {
+          "title": "Error Occurrences",
+          "id": "",
+          "scorecard": {
+            "breakdowns": [],
+            "dimensions": [
+              {
+                "column": "hour",
+                "columnType": "TIMESTAMP",
+                "maxBinCount": 0,
+                "sortColumn": "hour",
+                "sortOrder": "SORT_ORDER_ASCENDING",
+                "timeBinSize": "0s"
+              }
+            ],
+            "gaugeView": {
+              "lowerBound": 0,
+              "upperBound": 1
+            },
+            "measures": [
+              {
+                "aggregationFunction": {
+                  "parameters": [],
+                  "type": "count"
+                },
+                "column": ""
+              }
+            ],
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "opsAnalyticsQuery": {
+                "queryExecutionRules": {
+                  "useReservedSlots": false
+                },
+                "queryHandle": "",
+                "savedQueryId": "",
+                "sql": "SELECT\n  TIMESTAMP_TRUNC(timestamp, HOUR) AS hour, eg.id AS id\nFROM\n  `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`, UNNEST(error_groups) eg\nWHERE\n  IF(\n    ARRAY_LENGTH(@error_group_id) = 0,\n    TRUE,\n    IF(ARRAY_LENGTH(CAST(@error_group_id as ARRAY<STRING>)) IS NULL, TRUE, id IN UNNEST(@error_group_id))\n  )"
+              },
+              "outputFullDuration": false,
+              "unitOverride": ""
+            }
+          }
+        }
+      },
+      {
+        "yPos": 16,
+        "height": 25,
+        "width": 47,
+        "widget": {
+          "title": "Error Samples",
+          "timeSeriesTable": {
+            "columnSettings": [],
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "opsAnalyticsQuery": {
+                    "queryExecutionRules": {
+                      "useReservedSlots": false
+                    },
+                    "queryHandle": "CggAtzkOpfFIxhIgam9iX0pQM0FiVGdmTnlQOTR4VnU1dHNLM1ZFUHoydWQaAlVTQPyvlI6OBg",
+                    "sql": "SELECT\n  timestamp,\n  eg.id AS id,\n  severity,\n  ANY_VALUE(\n    CASE\n      WHEN json_payload IS NOT NULL THEN TO_JSON_STRING(json_payload.message) -- Convert JSON to string\n      ELSE text_payload\n    END) AS sample_error, -- pick a random sample\n  resource.type as resource_type,\n  JSON_VALUE(json_payload.context.reportLocation.filePath) as location,\nFROM\n  `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`,\n  UNNEST(error_groups) eg\nWHERE\nIF\n  ( ARRAY_LENGTH(@error_group_id) = 0, TRUE,\n  IF\n    (ARRAY_LENGTH(CAST(@error_group_id AS ARRAY<STRING>)) IS NULL, TRUE, id IN UNNEST(@error_group_id)) )\nGROUP BY all\nORDER BY timestamp DESC\n"
+                  }
+                }
+              }
+            ],
+            "metricVisualization": "NUMBER"
+          }
+        }
+      }
+    ]
+  }
+}
