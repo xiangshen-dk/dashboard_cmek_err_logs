@@ -251,10 +251,15 @@ After running the script, view errors in:
 
 1. **Create CMEK-encrypted log bucket with analytics:**
    ```bash
+   # Set environment variables
+   # Replace project id and bucket id as needed
+   export PROJECT_ID="your-gcp-project-id"
+   export LOG_BUCKET_ID="${PROJECT_ID}-cmek-logs"
+
    ./setup_cmek_log_bucket.sh \
-       --bucket-project my-project \
-       --kms-project my-project \
-       --bucket-id my-cmek-logs \
+       --bucket-project ${PROJECT_ID} \
+       --kms-project ${PROJECT_ID} \
+       --bucket-id ${LOG_BUCKET_ID} \
        --auto-create-kms
    ```
 
@@ -272,10 +277,6 @@ After running the script, view errors in:
     After setting up your CMEK log bucket, you can create a monitoring dashboard to visualize error reports:
 
     ```bash
-    # Set environment variables
-    export PROJECT_ID="your-gcp-project-id"
-    export LOG_BUCKET_ID="your-new-bucket-id"
-
     # Generate the dashboard JSON with your values
     envsubst < error_report_with_cmek.json > err_rpt.json
 
@@ -289,9 +290,9 @@ After running the script, view errors in:
 4. **Clean up when done:**
    ```bash
    ./teardown_cmek_log_bucket.sh \
-       --bucket-project my-project \
-       --kms-project my-project \
-       --bucket-id my-cmek-logs
+       --bucket-project ${PROJECT_ID} \
+       --kms-project ${PROJECT_ID} \
+       --bucket-id $LOG_BUCKET_ID
    ```
 
 ## Troubleshooting
