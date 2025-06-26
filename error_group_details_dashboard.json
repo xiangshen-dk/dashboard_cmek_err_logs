@@ -1,0 +1,240 @@
+{
+  "displayName": "Error Group Details",
+  "dashboardFilters": [
+    {
+      "filterType": "VALUE_ONLY",
+      "labelKey": "",
+      "templateVariable": "error_group_id",
+      "timeSeriesQuery": {
+        "opsAnalyticsQuery": {
+          "sql": "SELECT\n  eg.id AS error_group_id\nFROM\n  `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`, UNNEST(error_groups) eg\nWHERE array_LENGTH(error_groups) >= 1"
+        }
+      },
+      "valueType": "STRING_ARRAY"
+    }
+  ],
+  "mosaicLayout": {
+    "columns": 12,
+    "tiles": [
+      {
+        "xPos": 0,
+        "yPos": 0,
+        "width": 12,
+        "height": 2,
+        "widget": {
+          "timeSeriesTable": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "opsAnalyticsQuery": {
+                    "sql": "SELECT DISTINCT SPLIT(JSON_VALUE(json_payload, '$.message'), '\\n')[SAFE_OFFSET(1)] as error_message FROM `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`, UNNEST(error_groups) as eg WHERE IF(ARRAY_LENGTH(@error_group_id) = 0, TRUE, eg.id IN UNNEST(@error_group_id)) AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)"
+                  }
+                }
+              }
+            ],
+            "columnSettings": [
+              {
+                "column": "error_message",
+                "displayName": "",
+                "visible": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 2,
+        "width": 12,
+        "height": 2,
+        "widget": {
+          "timeSeriesTable": {
+            "columnSettings": [
+              {
+                "column": "resolution_status",
+                "displayName": "Resolution Status",
+                "visible": true
+              },
+              {
+                "column": "occurrences", 
+                "displayName": "Occurrences",
+                "visible": true
+              },
+              {
+                "column": "users_affected",
+                "displayName": "Users affected",
+                "visible": true
+              },
+              {
+                "column": "seen_in",
+                "displayName": "Seen in",
+                "visible": true
+              },
+              {
+                "column": "response_code",
+                "displayName": "Response Code",
+                "visible": true
+              },
+              {
+                "column": "storage_location",
+                "displayName": "Storage Location", 
+                "visible": true
+              },
+              {
+                "column": "first_seen",
+                "displayName": "First Seen",
+                "visible": true
+              },
+              {
+                "column": "last_seen",
+                "displayName": "Last Seen",
+                "visible": true
+              }
+            ],
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "opsAnalyticsQuery": {
+                    "sql": "SELECT\n  'Open' AS resolution_status,\n  COUNT(*) AS occurrences,\n  COUNT(DISTINCT COALESCE(JSON_VALUE(json_payload, '$.context.user'), JSON_VALUE(json_payload, '$.context.httpRequest.remoteIp'))) AS users_affected,\n  STRING_AGG(DISTINCT CONCAT(JSON_VALUE(json_payload, '$.serviceContext.service'), '.', JSON_VALUE(json_payload, '$.serviceContext.version')), ', ' LIMIT 2) AS seen_in,\n  CAST(MAX(COALESCE(CAST(JSON_VALUE(json_payload, '$.context.httpRequest.responseStatusCode') AS INT64), 500)) AS STRING) AS response_code,\n  ANY_VALUE(COALESCE(JSON_VALUE(resource.labels, '$.zone'), 'global')) AS storage_location,\n  CONCAT(CAST(DATE_DIFF(CURRENT_DATE(), DATE(MIN(timestamp)), DAY) AS STRING), ' days ago') AS first_seen,\n  CONCAT(CAST(DATE_DIFF(CURRENT_DATE(), DATE(MAX(timestamp)), DAY) AS STRING), ' days ago') AS last_seen\nFROM\n  `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`,\n  UNNEST(error_groups) as eg\nWHERE\n  IF(ARRAY_LENGTH(@error_group_id) = 0, TRUE, eg.id IN UNNEST(@error_group_id))\n  AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)\nGROUP BY\n  eg.id"
+                  }
+                }
+              }
+            ],
+            "displayColumnType": false,
+            "metricVisualization": "NUMBER"
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 4,
+        "width": 12,
+        "height": 4,
+        "widget": {
+          "xyChart": {
+            "chartOptions": {
+              "mode": "COLOR",
+              "showLegend": false,
+              "displayHorizontal": false
+            },
+            "dataSets": [
+              {
+                "plotType": "STACKED_BAR",
+                "targetAxis": "Y1",
+                "dimensions": [
+                  {
+                    "column": "time_bucket",
+                    "columnType": "TIMESTAMP",
+                    "sortColumn": "time_bucket",
+                    "sortOrder": "SORT_ORDER_ASCENDING",
+                    "timeBinSize": "30s"
+                  }
+                ],
+                "measures": [
+                  {
+                    "aggregationFunction": {
+                      "type": "count"
+                    },
+                    "column": ""
+                  }
+                ],
+                "timeSeriesQuery": {
+                  "opsAnalyticsQuery": {
+                    "sql": "SELECT\n  TIMESTAMP_TRUNC(timestamp, MINUTE) AS time_bucket,\n  eg.id\nFROM\n  `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`,\n  UNNEST(error_groups) as eg\nWHERE\n  IF(ARRAY_LENGTH(@error_group_id) = 0, TRUE, eg.id IN UNNEST(@error_group_id))\n  AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)"
+                  }
+                }
+              }
+            ],
+            "thresholds": [],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 8,
+        "width": 12,
+        "height": 3,
+        "widget": {
+          "title": "Sample stack trace",
+          "timeSeriesTable": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "opsAnalyticsQuery": {
+                    "sql": "SELECT DISTINCT JSON_VALUE(json_payload, '$.message') as stack_trace FROM `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`, UNNEST(error_groups) as eg WHERE IF(ARRAY_LENGTH(@error_group_id) = 0, TRUE, eg.id IN UNNEST(@error_group_id)) AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)"
+                  }
+                }
+              }
+            ],
+            "columnSettings": [
+              {
+                "column": "stack_trace",
+                "displayName": "",
+                "visible": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 11,
+        "width": 12,
+        "height": 5,
+        "widget": {
+          "title": "Recent samples",
+          "timeSeriesTable": {
+            "columnSettings": [
+              {
+                "column": "timestamp",
+                "displayName": "",
+                "visible": true
+              },
+              {
+                "column": "error_message",
+                "displayName": "",
+                "visible": true
+              },
+              {
+                "column": "http_method_url",
+                "displayName": "",
+                "visible": true
+              },
+              {
+                "column": "response_code",
+                "displayName": "",
+                "visible": true,
+                "alignment": "CENTER"
+              },
+              {
+                "column": "view_logs",
+                "displayName": "",
+                "visible": true,
+                "alignment": "RIGHT"
+              }
+            ],
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "opsAnalyticsQuery": {
+                    "sql": "SELECT\n  FORMAT_TIMESTAMP('%m/%d/%y, %l:%M %p', timestamp) AS timestamp,\n  SUBSTR(SPLIT(JSON_VALUE(json_payload, '$.message'), '\\n')[SAFE_OFFSET(1)], 0, 80) AS error_message,\n  CONCAT(JSON_VALUE(json_payload, '$.context.httpRequest.method'), ' ', JSON_VALUE(json_payload, '$.context.httpRequest.url')) AS http_method_url,\n  JSON_VALUE(json_payload, '$.context.httpRequest.responseStatusCode') AS response_code,\n  'View Logs >' AS view_logs,\n  timestamp AS sort_timestamp\nFROM\n  `$PROJECT_ID.us.$LOG_BUCKET_ID._AllLogs`,\n  UNNEST(error_groups) as eg\nWHERE\n  IF(ARRAY_LENGTH(@error_group_id) = 0, TRUE, eg.id IN UNNEST(@error_group_id))\n  AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)\nORDER BY\n  sort_timestamp DESC\nLIMIT 5"
+                  }
+                }
+              }
+            ],
+            "displayColumnType": false,
+            "metricVisualization": "NUMBER"
+          }
+        }
+      }
+    ]
+  },
+  "labels": {
+    "environment": "production",
+    "dashboard_type": "error_details",
+    "team": "platform"
+  }
+}
